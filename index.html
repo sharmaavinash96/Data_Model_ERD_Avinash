@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Food Delivery Data Model</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: A three-part dashboard structure was chosen for optimal usability. 1) A left-hand navigation pane lists all entities and thematic groups, acting as a table of contents and a control panel. This allows for quick filtering and focus. 2) A central, interactive canvas visualizes the ERD, allowing users to directly engage with the model. 3) A right-hand details panel provides context-sensitive information on demand. This layered approach prevents information overload by separating navigation, visualization, and detailed text, guiding the user from a high-level overview to specific details seamlessly. -->
+    <!-- Visualization & Content Choices: The core ERD is visualized using HTML divs for entities and an HTML Canvas for relationship lines, avoiding prohibited SVG/Mermaid. Goal: Organize & Show Relationships. Interaction: Clicking an entity highlights its connections and populates the details panel with its attributes and relationships. Thematic filters (Core, Order Details, Advanced) highlight related groups of entities. Justification: This method turns a static diagram into an educational tool, allowing users to deconstruct a complex model into understandable parts. The separation of concerns (visualization vs. details) enhances clarity and focus. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .entity {
+            transition: all 0.3s ease-in-out;
+            cursor: pointer;
+        }
+        .entity.active {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 3px #fb923c, 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            border-color: #fb923c;
+        }
+        .entity.inactive {
+            opacity: 0.3;
+            filter: grayscale(80%);
+        }
+        #erd-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+        .entity-card-wrapper {
+            position: relative;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-[#fdfbf8] text-[#4a4a4a] flex flex-col min-h-screen">
+
+    <header class="bg-white/80 backdrop-blur-sm border-b border-gray-200/80 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <h1 class="text-2xl font-bold text-gray-800">Food Delivery Platform Data Model</h1>
+            <p class="text-sm text-gray-500 mt-1">An interactive explorer for the database schema.</p>
+        </div>
+    </header>
+
+    <main class="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
+            
+            <aside class="lg:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-gray-200/80 h-fit">
+                <h2 class="text-lg font-semibold mb-4 text-gray-700">Explorer Controls</h2>
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="font-medium text-gray-600 mb-2">Filter by Group</h3>
+                        <div id="filter-buttons" class="flex flex-wrap gap-2">
+                            <button data-group="all" class="flex-grow text-sm px-3 py-2 bg-orange-500 text-white rounded-md shadow-sm hover:bg-orange-600 transition-all">All</button>
+                            <button data-group="core" class="flex-grow text-sm px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-all">Core</button>
+                            <button data-group="details" class="flex-grow text-sm px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-all">Details</button>
+                            <button data-group="advanced" class="flex-grow text-sm px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-all">Advanced</button>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-gray-600 mb-2">Jump to Entity</h3>
+                        <div id="entity-list" class="space-y-1">
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="lg:col-span-9 grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <div class="xl:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-200/80 min-h-[600px] lg:min-h-0">
+                    <h2 class="text-lg font-semibold mb-4 text-gray-700">Entity Relationship Diagram</h2>
+                    <div id="erd-container" class="relative w-full h-[700px]">
+                        <canvas id="erd-canvas"></canvas>
+                        <div id="erd-entities" class="relative w-full h-full">
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="details-panel" class="xl:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200/80 h-fit">
+                    <h2 class="text-lg font-semibold text-gray-700">Entity Details</h2>
+                    <div id="details-content" class="mt-4 text-gray-600">
+                        <p class="text-sm">Click on an entity in the diagram or select one from the list to see its details, attributes, and relationships here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="text-center py-4 text-xs text-gray-400">
+        Generated by Gemini | Interactive Data Model Visualizer
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const entitiesData = {
+                customers: {
+                    id: 'customers', name: 'Customers', group: 'core',
+                    position: { top: '5%', left: '5%' },
+                    attributes: [
+                        { name: 'customer_id', type: 'PK' },
+                        { name: 'name', type: 'string' },
+                        { name: 'email', type: 'string' },
+                        { name: 'phone', type: 'string' },
+                        { name: 'address', type: 'string' }
+                    ],
+                    description: "Represents the users who place orders on the platform."
+                },
+                restaurants: {
+                    id: 'restaurants', name: 'Restaurants', group: 'core',
+                    position: { top: '5%', left: '70%' },
+                    attributes: [
+                        { name: 'restaurant_id', type: 'PK' },
+                        { name: 'name', type: 'string' },
+                        { name: 'address', type: 'string' },
+                        { name: 'cuisine_type', type: 'string' }
+                    ],
+                    description: "Represents the food establishments that prepare and sell food."
+                },
+                delivery_partners: {
+                    id: 'delivery_partners', name: 'Delivery Partners', group: 'core',
+                    position: { top: '65%', left: '5%' },
+                    attributes: [
+                        { name: 'partner_id', type: 'PK' },
+                        { name: 'name', type: 'string' },
+                        { name: 'phone', type: 'string' },
+                        { name: 'vehicle_details', type: 'string' }
+                    ],
+                    description: "Represents the individuals who deliver the orders."
+                },
+                orders: {
+                    id: 'orders', name: 'Orders', group: 'core',
+                    position: { top: '35%', left: '35%' },
+                    attributes: [
+                        { name: 'order_id', type: 'PK' },
+                        { name: 'customer_id', type: 'FK' },
+                        { name: 'restaurant_id', type: 'FK' },
+                        { name: 'partner_id', type: 'FK' },
+                        { name: 'coupon_id', type: 'FK' },
+                        { name: 'order_date', type: 'datetime' },
+                        { name: 'status', type: 'string' }
+                    ],
+                    description: "The central transaction entity, linking customers, restaurants, and delivery partners."
+                },
+                menu_items: {
+                    id: 'menu_items', name: 'Menu Items', group: 'details',
+                    position: { top: '35%', left: '70%' },
+                    attributes: [
+                        { name: 'menu_item_id', type: 'PK' },
+                        { name: 'restaurant_id', type: 'FK' },
+                        { name: 'name', type: 'string' },
+                        { name: 'price', type: 'decimal' }
+                    ],
+                    description: "Individual food items available for purchase from a restaurant."
+                },
+                order_items: {
+                    id: 'order_items', name: 'Order Items', group: 'details',
+                    position: { top: '65%', left: '35%' },
+                    attributes: [
+                        { name: 'order_item_id', type: 'PK' },
+                        { name: 'order_id', type: 'FK' },
+                        { name: 'menu_item_id', type: 'FK' },
+                        { name: 'quantity', type: 'int' }
+                    ],
+                    description: "A junction table that connects an Order with specific Menu Items, resolving the many-to-many relationship."
+                },
+                payments: {
+                    id: 'payments', name: 'Payments', group: 'advanced',
+                    position: { top: '85%', left: '35%' },
+                    attributes: [
+                        { name: 'payment_id', type: 'PK' },
+                        { name: 'order_id', type: 'FK' },
+                        { name: 'amount', type: 'decimal' },
+                        { name: 'payment_method', type: 'string' },
+                        { name: 'status', type: 'string' }
+                    ],
+                    description: "Tracks payment attempts and status for each order."
+                },
+                reviews: {
+                    id: 'reviews', name: 'Reviews', group: 'advanced',
+                    position: { top: '65%', left: '70%' },
+                    attributes: [
+                        { name: 'review_id', type: 'PK' },
+                        { name: 'customer_id', type: 'FK' },
+                        { name: 'rated_entity_id', type: 'FK' },
+                        { name: 'rated_entity_type', type: 'string' },
+                        { name: 'rating', type: 'int' },
+                        { name: 'comment', type: 'string' }
+                    ],
+                    description: "Stores ratings and feedback from customers for both restaurants and delivery partners."
+                },
+                coupons: {
+                    id: 'coupons', name: 'Coupons', group: 'advanced',
+                    position: { top: '5%', left: '35%' },
+                    attributes: [
+                        { name: 'coupon_id', type: 'PK' },
+                        { name: 'coupon_code', type: 'string' },
+                        { name: 'discount_value', type: 'decimal' },
+                        { name: 'discount_type', type: 'string' }
+                    ],
+                    description: "Manages promotional discounts that can be applied to orders."
+                }
+            };
+
+            const relationships = [
+                { from: 'customers', to: 'orders', label: 'places' },
+                { from: 'restaurants', to: 'orders', label: 'prepares' },
+                { from: 'delivery_partners', to: 'orders', label: 'delivers' },
+                { from: 'restaurants', to: 'menu_items', label: 'has' },
+                { from: 'orders', to: 'order_items', label: 'contains' },
+                { from: 'menu_items', to: 'order_items', label: 'details' },
+                { from: 'orders', to: 'payments', label: 'has' },
+                { from: 'coupons', to: 'orders', label: 'applies to' },
+                { from: 'customers', to: 'reviews', label: 'writes' },
+                { from: 'restaurants', to: 'reviews', label: 'is rated in' },
+                { from: 'delivery_partners', to: 'reviews', label: 'is rated in' }
+            ];
+
+            const erdEntitiesContainer = document.getElementById('erd-entities');
+            const entityListContainer = document.getElementById('entity-list');
+            const detailsContent = document.getElementById('details-content');
+            const canvas = document.getElementById('erd-canvas');
+            const ctx = canvas.getContext('2d');
+            const filterButtons = document.getElementById('filter-buttons');
+            let activeEntityId = null;
+
+            function init() {
+                renderEntities();
+                renderEntityList();
+                setupEventListeners();
+                
+                const erdContainer = document.getElementById('erd-container');
+                canvas.width = erdContainer.clientWidth;
+                canvas.height = erdContainer.clientHeight;
+                
+                drawLines();
+                
+                new ResizeObserver(() => {
+                    canvas.width = erdContainer.clientWidth;
+                    canvas.height = erdContainer.clientHeight;
+                    drawLines();
+                }).observe(erdContainer);
+            }
+
+            function renderEntities() {
+                erdEntitiesContainer.innerHTML = '';
+                for (const key in entitiesData) {
+                    const entity = entitiesData[key];
+                    const entityEl = document.createElement('div');
+                    entityEl.id = `entity-${entity.id}`;
+                    entityEl.dataset.id = entity.id;
+                    entityEl.className = 'entity absolute bg-white border-2 border-gray-300 rounded-lg p-3 shadow-md w-48';
+                    entityEl.style.top = entity.position.top;
+                    entityEl.style.left = entity.position.left;
+                    
+                    let attributesHtml = entity.attributes.slice(0, 3).map(attr => `
+                        <div class="flex items-center justify-between text-xs mt-1">
+                            <span class="text-gray-600">${attr.name}</span>
+                            <span class="font-mono text-white text-[10px] rounded-full px-2 ${attr.type === 'PK' ? 'bg-orange-500' : 'bg-gray-400'}">${attr.type}</span>
+                        </div>
+                    `).join('');
+                    if (entity.attributes.length > 3) {
+                        attributesHtml += `<div class="text-center text-xs text-gray-400 mt-1">...</div>`;
+                    }
+                    
+                    entityEl.innerHTML = `
+                        <div class="font-semibold text-gray-800 text-center border-b pb-2">${entity.name}</div>
+                        <div class="mt-2">${attributesHtml}</div>
+                    `;
+                    erdEntitiesContainer.appendChild(entityEl);
+                }
+            }
+
+            function renderEntityList() {
+                entityListContainer.innerHTML = '';
+                for (const key in entitiesData) {
+                    const entity = entitiesData[key];
+                    const listItem = document.createElement('a');
+                    listItem.href = '#';
+                    listItem.dataset.id = entity.id;
+                    listItem.className = 'block text-sm p-2 rounded-md hover:bg-orange-50 transition-colors';
+                    listItem.textContent = entity.name;
+                    entityListContainer.appendChild(listItem);
+                }
+            }
+            
+            function getElementCenter(el) {
+                const rect = el.getBoundingClientRect();
+                const containerRect = erdEntitiesContainer.getBoundingClientRect();
+                return {
+                    x: rect.left - containerRect.left + rect.width / 2,
+                    y: rect.top - containerRect.top + rect.height / 2
+                };
+            }
+
+            function getEdgePoint(startEl, endEl) {
+                const startRect = startEl.getBoundingClientRect();
+                const endRect = endEl.getBoundingClientRect();
+                const containerRect = erdEntitiesContainer.getBoundingClientRect();
+
+                const start = {
+                    x: startRect.left - containerRect.left + startRect.width / 2,
+                    y: startRect.top - containerRect.top + startRect.height / 2
+                };
+                const end = {
+                    x: endRect.left - containerRect.left + endRect.width / 2,
+                    y: endRect.top - containerRect.top + endRect.height / 2
+                };
+
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const angle = Math.atan2(dy, dx);
+                
+                const halfWidth = startRect.width / 2;
+                const halfHeight = startRect.height / 2;
+
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                
+                let x, y;
+
+                if (halfWidth * Math.abs(sin) < halfHeight * Math.abs(cos)) {
+                    x = start.x + Math.sign(cos) * halfWidth;
+                    y = start.y + Math.sign(cos) * halfWidth * Math.tan(angle);
+                } else {
+                    y = start.y + Math.sign(sin) * halfHeight;
+                    x = start.x + Math.sign(sin) * halfHeight / Math.tan(angle);
+                }
+
+                return { x, y };
+            }
+
+            function drawLines() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                relationships.forEach(rel => {
+                    const fromEl = document.getElementById(`entity-${rel.from}`);
+                    const toEl = document.getElementById(`entity-${rel.to}`);
+
+                    if (fromEl && toEl) {
+                        const startPoint = getEdgePoint(fromEl, toEl);
+                        const endPoint = getEdgePoint(toEl, fromEl);
+                        
+                        let isActive = false;
+                        if(activeEntityId) {
+                            isActive = (rel.from === activeEntityId || rel.to === activeEntityId);
+                        } else {
+                             isActive = document.querySelectorAll('.inactive').length === 0;
+                        }
+
+                        ctx.beginPath();
+                        ctx.moveTo(startPoint.x, startPoint.y);
+                        ctx.lineTo(endPoint.x, endPoint.y);
+                        ctx.strokeStyle = isActive ? '#fb923c' : '#cbd5e1';
+                        ctx.lineWidth = isActive ? 2 : 1;
+                        ctx.stroke();
+                    }
+                });
+            }
+
+            function updateDetailsPanel(entityId) {
+                if (!entityId) {
+                    detailsContent.innerHTML = '<p class="text-sm">Click on an entity in the diagram or select one from the list to see its details, attributes, and relationships here.</p>';
+                    return;
+                }
+                const entity = entitiesData[entityId];
+                const related = relationships.filter(r => r.from === entityId || r.to === entityId);
+                
+                let attributesHtml = entity.attributes.map(attr => `
+                    <li class="flex items-center justify-between text-sm py-1">
+                        <span>${attr.name}</span>
+                        <span class="font-mono text-white text-xs rounded-full px-2 ${attr.type === 'PK' ? 'bg-orange-500' : 'bg-gray-400'}">${attr.type}</span>
+                    </li>
+                `).join('');
+
+                let relationshipsHtml = related.map(rel => {
+                    const otherEntityId = rel.from === entityId ? rel.to : rel.from;
+                    const otherEntityName = entitiesData[otherEntityId].name;
+                    return `<li class="text-sm py-1">${entity.name} -> ${otherEntityName} (${rel.label})</li>`;
+                }).join('');
+
+                detailsContent.innerHTML = `
+                    <h3 class="font-bold text-gray-800">${entity.name}</h3>
+                    <p class="text-sm mt-2 mb-4">${entity.description}</p>
+                    <h4 class="font-semibold text-gray-700 mt-4 border-t pt-3">Attributes</h4>
+                    <ul class="mt-2 space-y-1">${attributesHtml}</ul>
+                    <h4 class="font-semibold text-gray-700 mt-4 border-t pt-3">Relationships</h4>
+                    <ul class="mt-2 space-y-1">${relationshipsHtml}</ul>
+                `;
+            }
+
+            function setActiveEntity(entityId) {
+                activeEntityId = entityId;
+                document.querySelectorAll('.entity').forEach(el => {
+                    const isRelated = relationships.some(r => (r.from === entityId && r.to === el.dataset.id) || (r.to === entityId && r.from === el.dataset.id));
+                    
+                    if (el.dataset.id === entityId) {
+                        el.classList.add('active');
+                        el.classList.remove('inactive');
+                    } else if (isRelated) {
+                         el.classList.remove('active', 'inactive');
+                    } else {
+                        el.classList.add('inactive');
+                        el.classList.remove('active');
+                    }
+                });
+                drawLines();
+                updateDetailsPanel(entityId);
+            }
+            
+            function clearActiveState() {
+                activeEntityId = null;
+                document.querySelectorAll('.entity').forEach(el => {
+                    el.classList.remove('active', 'inactive');
+                });
+                drawLines();
+                updateDetailsPanel(null);
+            }
+
+            function filterByGroup(group) {
+                clearActiveState();
+                if (group === 'all') return;
+                
+                document.querySelectorAll('.entity').forEach(el => {
+                    const entity = entitiesData[el.dataset.id];
+                    if (entity.group !== group) {
+                        el.classList.add('inactive');
+                    }
+                });
+            }
+
+            function setupEventListeners() {
+                erdEntitiesContainer.addEventListener('click', (e) => {
+                    const entityEl = e.target.closest('.entity');
+                    if (entityEl) {
+                        const entityId = entityEl.dataset.id;
+                        if (activeEntityId === entityId) {
+                            clearActiveState();
+                        } else {
+                            setActiveEntity(entityId);
+                        }
+                    }
+                });
+                
+                entityListContainer.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const linkEl = e.target.closest('a');
+                    if (linkEl) {
+                        const entityId = linkEl.dataset.id;
+                        setActiveEntity(entityId);
+                        document.getElementById(`entity-${entityId}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+
+                filterButtons.addEventListener('click', (e) => {
+                    const buttonEl = e.target.closest('button');
+                    if (buttonEl) {
+                        document.querySelectorAll('#filter-buttons button').forEach(btn => {
+                            btn.classList.remove('bg-orange-500', 'text-white');
+                            btn.classList.add('bg-gray-200', 'text-gray-700');
+                        });
+                        buttonEl.classList.add('bg-orange-500', 'text-white');
+                        buttonEl.classList.remove('bg-gray-200', 'text-gray-700');
+                        filterByGroup(buttonEl.dataset.group);
+                    }
+                });
+            }
+
+            init();
+        });
+    </script>
+</body>
+</html>
